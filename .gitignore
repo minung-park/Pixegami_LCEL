@@ -119,7 +119,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-env_*
+env_lcel/
 
 # Spyder project settings
 .spyderproject
