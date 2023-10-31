@@ -1,11 +1,14 @@
 from pydantic import BaseModel, Field
 from langchain.prompts import PromptTemplate
-from packages.models import CHAT_LLM, CHAT_LLM_4, vector_setting
+from packages.models import CHAT_LLM, vector_setting
 from packages.functions import print_green, print_blue
 from langchain.output_parsers import PydanticOutputParser
 from langchain.chains import LLMChain, SequentialChain
 from langchain.schema.runnable import RunnableParallel
-from langchain.schema.output_parser import  StrOutputParser
+from langchain.schema.output_parser import StrOutputParser
+from packages.custom_parser import CustomCategoryParser, CustomKeywordParser
+from operator import itemgetter
+
 
 # TODO: 4 steps
 # TODO: 1. extract category from the input
@@ -16,6 +19,10 @@ from langchain.schema.output_parser import  StrOutputParser
 vector_store = vector_setting()
 retriever = vector_store.as_retriever()
 
+# print(retriever.search_type)
+# retriever.get_relevant_documents(query="멀티버스")
+
+
 class Output(BaseModel):
     category: str = Field(description="Extract category from the input")
     text: str = Field(description="Extract text from the input")
@@ -23,7 +30,8 @@ class Output(BaseModel):
 
 
 prompt_1 = """
-Extact category from the input. Choose from the following categories:\n
+Extact category from the input. Answer is only one of the following: general, keyword, content, similar, trending.\n
+Choose from the following categories:\n
 
 Categories: ['general', 'keyword', 'content, 'similar', 'trending']
 - 'general': Use this category for questions that are not specifically related to OTT programs.
@@ -36,13 +44,13 @@ input: {input}
 """
 
 prompt_2 = """
-Extract keyword from the input:\n
+Extract keyword from the input. If you do not extract, you must say "None":\n
 {input}
 """
 
 prompt_3 = """
-As an AI assistant for the OTT platform, Wavve, your main task is to provide truthful responses to user's query based on the information available. 
-Remember to be polite and avoid using harmful language. 
+As an AI assistant for the OTT platform, Wavve, your main task is to provide truthful responses to user's query based on the information available.
+Remember to be polite and avoid using harmful language.
 
 category: {category}\n
 input: {keyword}\n
@@ -50,31 +58,30 @@ input: {keyword}\n
 # search_result: {search_result}
 # Set up the models
 llm3 = CHAT_LLM
-llm4 = CHAT_LLM_4
+# llm4 = CHAT_LLM_4
 
-from operator import itemgetter
 p1_template = PromptTemplate.from_template(prompt_1)
 # chain_1 = LLMChain(llm=llm3, prompt=p1_template, output_key="category")
-chain_1 = p1_template | llm3 | StrOutputParser()
+chain_1 = p1_template | llm3 | StrOutputParser() | CustomCategoryParser()
 
 p2_template = PromptTemplate.from_template(prompt_2)
 # chain_2 = LLMChain(llm=llm3, prompt=p2_template, output_key="keyword")
-chain_2 = p2_template | llm3 | StrOutputParser()
+chain_2 = p2_template | llm3 | StrOutputParser() | CustomKeywordParser()
 
 map_chain = RunnableParallel(category=chain_1, keyword=chain_2)
 
 p3_template = PromptTemplate.from_template(prompt_3)
 
-from operator import itemgetter
-print(itemgetter("category", "keyword")(map_chain.invoke({"input": "멀티버스가 뭐야?"})))
 
 
-retrieved_documents = {
-    "search_result": retriever, "keyword": itemgetter("keyword"), "category": itemgetter("category")
-} | p3_template | llm3 | StrOutputParser() # https://python.langchain.com/docs/modules/chains/foundational/sequential_chains
-#
-response = retrieved_documents.invoke({"input": "멀티버스가 뭐야?"})
-print(response)
+
+# retrieved_documents = {
+#     "search_result": retriever, "keyword": itemgetter("keyword"), "category": itemgetter("category")
+# } | p3_template | llm3 | StrOutputParser()
+# # https://python.langchain.com/docs/modules/chains/foundational/sequential_chains
+# #
+# response = retrieved_documents.invoke({"input": "멀티버스가 뭐야?"})
+# print(response)
 
 
 #
@@ -101,7 +108,11 @@ input = [
     "한번 다녀왔습니다." # content
 ]
 
-
+for i in input:
+    output = map_chain.invoke({"input": i})
+    print(itemgetter("category", "keyword")(output))
+    # print(output)
+    # print(custom_parser.parse_result(itemgetter("category")(output)))
 
 # for i in range(len(input)):
 #     # response = map_chain.invoke({"input": input[i]})

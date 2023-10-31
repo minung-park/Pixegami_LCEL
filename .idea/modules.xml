@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Pixegami_LCEL.iml" filepath="$PROJECT_DIR$/.idea/Pixegami_LCEL.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Pixegami_LCEL.iml" filepath="$PROJECT_DIR$/Pixegami_LCEL.iml" />
     </modules>
   </component>
 </project>
