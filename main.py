@@ -4,6 +4,9 @@ from packages.models import CHAT_LLM, vector_setting
 from packages.functions import print_green, print_blue
 from langchain.output_parsers import PydanticOutputParser
 from langchain.chains import LLMChain, SequentialChain
+from langchain.chains import ConversationalRetrievalChain
+from langchain.chains import MultiRetrievalQAChain
+from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.schema.runnable import RunnableParallel
 from langchain.schema.output_parser import StrOutputParser
 from packages.custom_parser import CustomCategoryParser, CustomKeywordParser
@@ -18,9 +21,6 @@ from operator import itemgetter
 
 vector_store = vector_setting()
 retriever = vector_store.as_retriever()
-
-# print(retriever.search_type)
-# retriever.get_relevant_documents(query="멀티버스")
 
 
 class Output(BaseModel):
@@ -51,45 +51,43 @@ Extract keyword from the input. If you do not extract, you must say "None":\n
 prompt_3 = """
 As an AI assistant for the OTT platform, Wavve, your main task is to provide truthful responses to user's query based on the information available.
 Remember to be polite and avoid using harmful language.
+You must answer the Korean language.\n
 
 category: {category}\n
 input: {keyword}\n
+search_result: 
 """
-# search_result: {search_result}
+
 # Set up the models
 llm3 = CHAT_LLM
 # llm4 = CHAT_LLM_4
 
 p1_template = PromptTemplate.from_template(prompt_1)
-# chain_1 = LLMChain(llm=llm3, prompt=p1_template, output_key="category")
 chain_1 = p1_template | llm3 | StrOutputParser() | CustomCategoryParser()
 
 p2_template = PromptTemplate.from_template(prompt_2)
-# chain_2 = LLMChain(llm=llm3, prompt=p2_template, output_key="keyword")
 chain_2 = p2_template | llm3 | StrOutputParser() | CustomKeywordParser()
 
 map_chain = RunnableParallel(category=chain_1, keyword=chain_2)
 
 p3_template = PromptTemplate.from_template(prompt_3)
+full_chain = (
+    map_chain
+    # | {"search_result": retriever, "keyword": itemgetter("keyword"), "category": itemgetter("category")}
+    | p3_template
+    | llm3
+    # | LLMChain(llm=retriever, prompt=p3_template)
+    | StrOutputParser()
+)
 
-
-
-
-# retrieved_documents = {
-#     "search_result": retriever, "keyword": itemgetter("keyword"), "category": itemgetter("category")
-# } | p3_template | llm3 | StrOutputParser()
-# # https://python.langchain.com/docs/modules/chains/foundational/sequential_chains
-# #
-# response = retrieved_documents.invoke({"input": "멀티버스가 뭐야?"})
-# print(response)
-
-
+# # TEST
+response = full_chain.invoke({"input": "멀티버스가 뭐야?"})
+print(response)
 #
-# chain_3 = {"keyword": map_chain["keyword"],
-#            "category": map_chain["category"],
-#            "search_result": retrieved_documents } | p3_template | llm3 | StrOutputParser() # https://python.langchain.com/docs/modules/chains/foundational/sequential_chains
-# #
-
+# # print(retriever.search_type)
+# # docs = retriever.get_relevant_documents(query=response)
+# docs = retriever.invoke(response)
+# print_green(docs)
 
 
 input = [
@@ -109,16 +107,14 @@ input = [
 ]
 
 for i in input:
+    # break
     output = map_chain.invoke({"input": i})
-    print(itemgetter("category", "keyword")(output))
+    # print(itemgetter("category", "keyword")(output))
     # print(output)
-    # print(custom_parser.parse_result(itemgetter("category")(output)))
+    # response = full_chain.invoke({"input": i})
+    # print_blue(response)
 
-# for i in range(len(input)):
-#     # response = map_chain.invoke({"input": input[i]})
-#     # print(chain_3)
-#     response = chain_3.invoke({"input": input[i]})
-#     print_blue(f"Response for GPT3: {response}")
-#     print("\n")
-
-
+    # print(retriever.search_type)
+    query = itemgetter("keyword")(output)
+    docs = retriever.get_relevant_documents(query=", ".join(query))
+    print_blue(docs)
